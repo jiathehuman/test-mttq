@@ -1,18 +1,40 @@
 #!/bin/bash
 
-# Deploy MQTT brokers using Multipass
-# Creates 5 VMs with static IPs and full mesh bridging
+# MQTT Broker Cluster Deployment Script
+#
+# Automated deployment of a high-availability MQTT broker cluster using Multipass VMs.
+# This script orchestrates the creation of 5 Ubuntu VMs configured as MQTT brokers
+# with full mesh bridging topology. Each broker maintains persistent connections
+# to all other brokers in the cluster to ensure message replication and failover.
+#
+# Architecture:
+# - 5 Mosquitto MQTT brokers deployed on separate Ubuntu 20.04 VMs
+# - Full mesh bridging configuration for maximum redundancy
+# - Priority-based failover sequence (broker1 = primary, others = sequential backups)
+# - Persistent session support and retained message replication
+# - Dynamic discovery and automatic reconnection with exponential backoff
+#
+# VM Configuration:
+# - Memory: 1GB per VM (sufficient for MQTT broker + OS overhead)
+# - Disk: 5GB per VM (adequate for logs, configs, and message persistence)
+# - CPU: 1 vCPU per VM (MQTT is not CPU intensive)
+# - Network: Bridged networking with static IP assignment
+#
+# Dependencies: Multipass (must be pre-installed via setup-environment.sh)
 
-set -e
+set -e  # Exit immediately on any command failure
 
 echo "Deploying MQTT Broker Network"
 
-# Configuration
+# Broker cluster configuration
+# Array definitions must match for proper IP-to-hostname mapping
 BROKERS=("broker1" "broker2" "broker3" "broker4" "broker5")
 IPS=("192.168.100.10" "192.168.100.11" "192.168.100.12" "192.168.100.13" "192.168.100.14")
-MEMORY="1G"
-DISK="5G"
-CPUS="1"
+
+# VM resource allocation - tuned for MQTT broker workload
+MEMORY="1G"    # 1GB RAM per broker (Mosquitto is memory-efficient)
+DISK="5G"      # 5GB storage (logs, configs, message persistence)
+CPUS="1"       # Single vCPU (MQTT is I/O bound, not CPU intensive)
 
 # Check if Multipass is installed
 if ! command -v multipass &> /dev/null; then
@@ -256,7 +278,7 @@ verify_deployment() {
     done
 }# Function to setup networking (if needed)
 setup_networking() {
-    echo "Setting up network configuration..."
+        echo "Configuring VM network infrastructure..."
 
     # Get the network bridge information
     echo "Current Multipass network info:"

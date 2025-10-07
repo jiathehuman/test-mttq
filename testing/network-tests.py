@@ -1,7 +1,26 @@
 #!/usr/bin/env python3
 """
-MQTT Network Testing Suite
-Tests broker replication, failover, and recovery scenarios
+MQTT Broker Cluster Comprehensive Testing Suite
+
+Automated testing framework for validating MQTT broker cluster functionality,
+failover behavior, message replication, and recovery scenarios. Provides
+comprehensive validation of the distributed MQTT architecture including
+load balancer integration, health monitoring, and client failover mechanisms.
+
+Test Categories:
+1. Connectivity Testing - Validates basic MQTT protocol connectivity to all brokers
+2. Replication Testing - Verifies message replication across broker mesh network
+3. Failover Testing - Simulates broker failures and validates client failover
+4. Recovery Testing - Tests broker recovery and cluster reintegration
+5. Load Testing - Validates performance under concurrent client load
+6. Persistence Testing - Verifies retained messages and session persistence
+
+The testing suite implements multi-threaded test execution with real-time
+monitoring and comprehensive result reporting. Each test scenario includes
+detailed metrics collection and failure analysis.
+
+Dependencies: paho-mqtt, requests, subprocess (for VM control)
+Architecture: Multi-threaded Python test runner with MQTT client simulation
 """
 
 import subprocess
@@ -14,8 +33,27 @@ from datetime import datetime
 import sys
 import os
 
+
 class MQTTNetworkTester:
+    """
+    Comprehensive MQTT cluster testing framework.
+
+    Provides automated testing capabilities for MQTT broker clusters including
+    connectivity validation, failover simulation, recovery testing, and
+    performance benchmarking. Implements thread-safe test execution with
+    detailed result collection and analysis.
+    """
+
     def __init__(self):
+        """
+        Initialize the MQTT network testing framework.
+
+        Sets up broker configuration, test parameters, and result collection
+        structures. Configures timing parameters for various test scenarios
+        based on expected network behavior and failover timeouts.
+        """
+        # Broker cluster configuration - matches deployment configuration
+        # IP addresses should align with actual VM deployment from deploy-brokers.sh
         self.brokers = [
             {"id": "broker1", "ip": "192.168.64.2", "port": 1883, "priority": 1},
             {"id": "broker2", "ip": "192.168.64.3", "port": 1883, "priority": 2},
@@ -24,19 +62,25 @@ class MQTTNetworkTester:
             {"id": "broker5", "ip": "192.168.64.6", "port": 1883, "priority": 5},
         ]
 
+        # Load balancer configuration for client connectivity testing
         self.load_balancer = {"host": "localhost", "port": 1883}
+
+        # Health service configuration for monitoring integration
         self.health_service = {"host": "localhost", "port": 5000}
 
-        self.test_results = []
-        self.test_messages = []
-        self.received_messages = {}
+        # Test result collection and message tracking
+        self.test_results = []        # Comprehensive test result history
+        self.test_messages = []       # Published test messages for validation
+        self.received_messages = {}   # Received message tracking by topic
 
-        # Test configuration
-        self.test_duration = 300  # 5 minutes
-        self.failure_interval = 60  # 60 seconds
-        self.recovery_time = 60  # 60 seconds
+        # Test execution timing configuration
+        # These values are tuned based on MQTT keepalive, network latency,
+        # and expected failover detection times in the cluster
+        self.test_duration = 300      # 5 minute comprehensive test duration
+        self.failure_interval = 60    # 60 second broker failure simulation
+        self.recovery_time = 60       # 60 second recovery observation period
 
-        print("🧪 MQTT Network Tester initialized")
+        print("MQTT Network Comprehensive Testing Suite initialized")
 
     def log_result(self, test_name, status, details=None):
         """Log test result"""

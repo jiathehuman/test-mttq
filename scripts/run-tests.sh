@@ -1,20 +1,44 @@
 #!/bin/bash
 
-# Run comprehensive MQTT network tests
-# Executes the full test suite including failover scenarios
+# MQTT Broker Cluster Comprehensive Testing Framework
+#
+# Automated testing orchestrator for validating MQTT broker cluster functionality,
+# failover behavior, and system resilience. Executes comprehensive test scenarios
+# including connectivity validation, message replication verification, broker
+# failure simulation, and recovery testing.
+#
+# Test Suite Coverage:
+# - Infrastructure Prerequisites Validation
+# - MQTT Protocol Connectivity Testing
+# - Load Balancer Functionality Verification
+# - Health Service API Integration Testing
+# - Broker Failover and Recovery Scenarios
+# - Message Replication and Persistence Validation
+# - Performance and Load Testing Under Various Conditions
+#
+# Testing Strategy:
+# - Sequential test execution with dependency validation
+# - Comprehensive prerequisite checking before test initiation
+# - Detailed result logging with timestamped entries
+# - Failure isolation and diagnostic information collection
+# - Performance metrics collection and trend analysis
+#
+# Output: Structured test results in logs/test-results/ directory
+# Integration: Designed for CI/CD pipeline integration and automated validation
 
-set -e
+set -e  # Exit immediately on any command failure
 
-echo "🧪 MQTT Network Test Suite"
+echo "MQTT Broker Cluster Comprehensive Testing Framework"
 
-# Configuration
+# Testing framework configuration and directory structure
 PROJECT_ROOT="/Users/main/Desktop/test-mqtt-brokers"
 TEST_RESULTS_DIR="${PROJECT_ROOT}/logs/test-results"
 
-# Change to project directory
+# Ensure execution context alignment with project structure
 cd "${PROJECT_ROOT}"
 
-# Create test results directory
+# Initialize test result collection infrastructure
+# Creates timestamped directories for test run isolation and historical analysis
 mkdir -p "$TEST_RESULTS_DIR"
 
 # Function to check prerequisites

@@ -1,21 +1,43 @@
 #!/bin/bash
 
-# Start all MQTT network services
-# Coordinates startup of brokers, health service, nginx, and dashboard
+# MQTT Broker Cluster Service Orchestration Script
+#
+# Comprehensive service startup coordinator for the MQTT broker cluster ecosystem.
+# Manages the sequential startup and health validation of all system components
+# including broker VMs, load balancer, monitoring services, and web dashboard.
+#
+# Service Startup Sequence:
+# 1. Broker VM validation and startup (via Multipass)
+# 2. Nginx load balancer configuration and startup
+# 3. Python health monitoring service initialization
+# 4. Node.js web dashboard server startup
+# 5. Cross-service connectivity validation and health checks
+#
+# Key Features:
+# - Process lifecycle management with PID tracking
+# - Service dependency validation and startup ordering
+# - Health check integration with automatic retry logic
+# - Graceful error handling and rollback capabilities
+# - Comprehensive logging for operational monitoring
+# - Background service management with daemon process control
+#
+# Prerequisites: Completed environment setup via setup-environment.sh
+# Post-startup: Full cluster operational with monitoring dashboard available
 
-set -e
+set -e  # Exit immediately on any command failure
 
-echo "🚀 Starting MQTT Hierarchical Network Services"
+echo "Initializing MQTT Broker Cluster Service Startup"
 
-# Configuration
+# Project configuration and directory structure
 PROJECT_ROOT="/Users/main/Desktop/test-mqtt-brokers"
 HEALTH_SERVICE_PID_FILE="${PROJECT_ROOT}/logs/health-service.pid"
 DASHBOARD_PID_FILE="${PROJECT_ROOT}/logs/dashboard.pid"
 
-# Change to project directory
+# Ensure working directory alignment with project structure
 cd "${PROJECT_ROOT}"
 
-# Create logs directory
+# Initialize logging infrastructure for service management
+# Creates centralized log directory for all service output and process tracking
 mkdir -p logs
 
 # Function to check if a service is running

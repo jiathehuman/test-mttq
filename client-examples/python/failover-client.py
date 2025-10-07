@@ -1,7 +1,33 @@
 #!/usr/bin/env python3
 """
-MQTT Client with Transparent Failover
-Connects through nginx load balancer for automatic failover
+High-Availability MQTT Client with Transparent Broker Failover
+
+Production-ready MQTT client implementation that provides transparent failover
+capabilities through integration with nginx load balancer. Automatically handles
+broker failures, connection recovery, and maintains session state across
+failover events.
+
+Key Features:
+- Transparent connection management through load balancer
+- Exponential backoff reconnection strategy with configurable limits
+- Automatic topic resubscription after failover events
+- Connection metrics and statistics tracking
+- Thread-safe operation for concurrent publish/subscribe operations
+- Client status broadcasting for cluster monitoring integration
+- Comprehensive error handling and logging
+
+Architecture:
+- Single MQTT client connection through nginx TCP load balancer
+- Load balancer handles broker selection and failover routing
+- Client maintains subscription state and automatically resubscribes
+- Exponential backoff prevents connection storms during failures
+- Status topic integration enables monitoring of client connectivity
+
+Use Cases:
+- IoT device connectivity with high availability requirements
+- Application integration requiring reliable message delivery
+- Development and testing of MQTT failover scenarios
+- Production workloads requiring transparent broker failover
 """
 
 import paho.mqtt.client as mqtt
@@ -12,32 +38,57 @@ import uuid
 import random
 from datetime import datetime
 
+
 class MQTTFailoverClient:
-    def __init__(self, client_id=None, load_balancer_host="localhost", load_balancer_port=1883):
+    """
+    High-availability MQTT client with transparent broker failover.
+
+    Provides robust MQTT connectivity through nginx load balancer with
+    automatic failover, reconnection management, and session recovery.
+    Implements exponential backoff reconnection strategy and maintains
+    subscription state across failover events.
+    """
+
+    def __init__(self, client_id=None, load_balancer_host="localhost",
+                 load_balancer_port=1883):
+        """
+        Initialize MQTT failover client.
+
+        Args:
+            client_id: Unique client identifier (auto-generated if None)
+            load_balancer_host: Nginx load balancer hostname/IP
+            load_balancer_port: Nginx load balancer MQTT port
+        """
+        # Client identification - unique across cluster for session management
         self.client_id = client_id or f"client-{uuid.uuid4().hex[:8]}"
+
+        # Load balancer connection parameters
         self.load_balancer_host = load_balancer_host
         self.load_balancer_port = load_balancer_port
 
+        # MQTT client setup with callback configuration
         self.client = mqtt.Client(self.client_id)
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = self.on_disconnect
         self.client.on_message = self.on_message
         self.client.on_publish = self.on_publish
 
+        # Connection state management
         self.connected = False
         self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 10
-        self.reconnect_delay = 5  # seconds
+        self.max_reconnect_attempts = 10  # Prevent infinite reconnection loops
+        self.reconnect_delay = 5          # Base delay for exponential backoff
 
+        # Topic management for automatic resubscription after failover
         self.status_topic = f"clients/status/{self.client_id}"
-        self.subscribed_topics = set()
+        self.subscribed_topics = set()    # Track subscriptions for recovery
 
-        # Message stats
+        # Connection and message statistics for monitoring and debugging
         self.messages_sent = 0
         self.messages_received = 0
-        self.connection_start = None
+        self.connection_start = None      # Track connection duration
 
-        print(f"🚀 Initialized MQTT client: {self.client_id}")
+        print(f"Initialized MQTT failover client: {self.client_id}")
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:

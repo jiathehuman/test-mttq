@@ -1,7 +1,27 @@
 #!/usr/bin/env python3
 """
-MQTT Health Check Service
-Monitors broker health and manages nginx upstream configuration
+MQTT Broker Health Monitoring and Load Balancer Management Service
+
+This service provides comprehensive health monitoring for a distributed MQTT broker cluster
+and manages the nginx load balancer configuration dynamically based on broker availability.
+
+Key responsibilities:
+- Continuous health monitoring of all MQTT brokers in the cluster
+- TCP connectivity validation to ensure brokers are reachable
+- MQTT protocol-level health checks with publish/subscribe validation
+- Dynamic management of nginx upstream server configuration
+- RESTful API endpoints for external monitoring and integration
+- Real-time client connection tracking and reporting
+- Centralized logging and metrics collection for operational visibility
+
+The service implements a multi-threaded architecture with separate workers for:
+- MQTT health monitoring (protocol-level validation)
+- TCP health checking (network-level validation)
+- HTTP API server (external interface)
+- Broker status broadcasting (cluster communication)
+
+Architecture: Multi-threaded Python service with Flask HTTP API
+Dependencies: paho-mqtt, Flask, requests
 """
 
 import json
@@ -16,49 +36,100 @@ from flask import Flask, jsonify, request
 import paho.mqtt.client as mqtt
 import requests
 
-# Configuration
+# Broker cluster configuration
+# Each broker entry defines network location and failover priority
+# Priority determines load balancer weight and failover sequence
 BROKERS = [
-    {"id": "broker1", "ip": "192.168.64.2", "port": 1883, "priority": 1},
-    {"id": "broker2", "ip": "192.168.64.3", "port": 1883, "priority": 2},
-    {"id": "broker3", "ip": "192.168.64.4", "port": 1883, "priority": 3},
-    {"id": "broker4", "ip": "192.168.64.5", "port": 1883, "priority": 4},
-    {"id": "broker5", "ip": "192.168.64.6", "port": 1883, "priority": 5},
+    {"id": "broker1", "ip": "192.168.64.2", "port": 1883, "priority": 1},  # Primary broker
+    {"id": "broker2", "ip": "192.168.64.3", "port": 1883, "priority": 2},  # Secondary failover
+    {"id": "broker3", "ip": "192.168.64.4", "port": 1883, "priority": 3},  # Tertiary failover
+    {"id": "broker4", "ip": "192.168.64.5", "port": 1883, "priority": 4},  # Quaternary failover
+    {"id": "broker5", "ip": "192.168.64.6", "port": 1883, "priority": 5},  # Final fallback
 ]
 
-HEALTH_TOPIC = "system/health/brokers"
-CLIENT_STATUS_TOPIC = "clients/status"
+# MQTT topic hierarchy for internal system communication
+HEALTH_TOPIC = "system/health/brokers"          # Health status broadcasts
+CLIENT_STATUS_TOPIC = "clients/status"          # Client connection tracking
+
+# Logging configuration - centralized log file for operational monitoring
 LOG_FILE = "/Users/main/Desktop/test-mqtt-brokers/logs/health-service.log"
 
-# Global state
+# Global state management - thread-safe data structures for cluster state
+# broker_status: Real-time health status of each broker in the cluster
+# client_connections: Active client connection tracking and metadata
+# service_running: Service lifecycle management flag for graceful shutdown
 broker_status = {}
 client_connections = {}
 service_running = True
 
-# Setup logging
+# Logging infrastructure setup
+# Configures dual-output logging to both file and console for operational visibility
+# File logging enables persistent audit trail and troubleshooting
+# Console logging provides real-time monitoring during development and debugging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
+        logging.FileHandler(LOG_FILE),  # Persistent logging for operations
+        logging.StreamHandler()         # Real-time console output
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Flask app for HTTP health checks
+# Flask HTTP API server for external monitoring and integration
+# Provides RESTful endpoints for cluster status, health metrics, and control operations
 app = Flask(__name__)
 
+
 class MQTTHealthMonitor:
+    """
+    MQTT Health Monitor Implementation
+
+    Provides comprehensive MQTT protocol-level health monitoring for broker cluster.
+    Implements active health checking by connecting to brokers and validating
+    publish/subscribe functionality. Manages dynamic broker discovery and
+    automatic failover between healthy brokers.
+
+    Key responsibilities:
+    - Maintain persistent MQTT connections to monitor broker availability
+    - Subscribe to health status topics from all brokers in the cluster
+    - Track client connection events and maintain connection registry
+    - Handle broker failover with exponential backoff reconnection logic
+    - Validate MQTT protocol functionality beyond simple TCP connectivity
+    """
+
     def __init__(self):
+        """
+        Initialize MQTT health monitoring client.
+
+        Sets up MQTT client with callback handlers for connection management,
+        message processing, and disconnect handling. The client uses a unique
+        identifier to avoid conflicts with other monitoring instances.
+        """
         self.client = mqtt.Client("health-monitor-service")
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
-        self.connected_broker = None
+        self.connected_broker = None  # Track current active broker connection
 
     def on_connect(self, client, userdata, flags, rc):
-        logger.info(f"Health monitor connected to MQTT broker with result code {rc}")
+        """
+        MQTT connection established callback handler.
+
+        Executed when MQTT client successfully connects to a broker.
+        Automatically subscribes to system health topics and client status
+        channels to begin monitoring cluster state.
+
+        Args:
+            client: MQTT client instance
+            userdata: User-defined data passed to callbacks
+            flags: Connection flags from broker
+            rc: Connection result code (0 = success)
+        """
+        logger.info(f"Health monitor connected with result code {rc}")
+        # Subscribe to broker health status broadcasts
         client.subscribe(f"{HEALTH_TOPIC}")
+        # Subscribe to client connection status updates (wildcard subscription)
         client.subscribe(f"{CLIENT_STATUS_TOPIC}/+")
 
     def on_message(self, client, userdata, msg):

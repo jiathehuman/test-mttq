@@ -1,3 +1,29 @@
+/**
+ * MQTT Broker Cluster Monitoring Dashboard Server
+ *
+ * Real-time web dashboard for monitoring MQTT broker cluster health,
+ * client connections, and system performance metrics. Provides live
+ * WebSocket-based updates and RESTful API endpoints for cluster visibility.
+ *
+ * Key Features:
+ * - Real-time broker health monitoring with WebSocket updates
+ * - Client connection tracking and session management visibility
+ * - TCP connectivity validation and network health checks
+ * - Historical data collection and trend analysis
+ * - Responsive web interface with automatic refresh capabilities
+ * - CORS-enabled API for external integration and monitoring tools
+ *
+ * Architecture:
+ * - Express.js HTTP server with Socket.io WebSocket integration
+ * - Periodic health service polling with configurable intervals
+ * - In-memory data caching for performance optimization
+ * - Static file serving for dashboard HTML/CSS/JS assets
+ * - Error handling and graceful degradation for service unavailability
+ *
+ * Dependencies: express, socket.io, axios, cors
+ * Integration: Python health monitoring service (port 5000)
+ */
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -5,30 +31,35 @@ const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
 
+// Express application and HTTP server setup
 const app = express();
 const server = http.createServer(app);
+
+// WebSocket server configuration for real-time dashboard updates
+// CORS configuration allows cross-origin requests for development environments
 const io = socketIo(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: "*",              // Allow all origins (restrict in production)
+    methods: ["GET", "POST"]  // Supported HTTP methods for CORS
   }
 });
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// Middleware configuration for HTTP request processing
+app.use(cors());                                      // Enable CORS for API endpoints
+app.use(express.json());                              // Parse JSON request bodies
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static dashboard assets
 
-// Configuration
-const HEALTH_SERVICE_URL = 'http://localhost:5000';
-const UPDATE_INTERVAL = 2000; // 2 seconds
+// Service integration configuration
+const HEALTH_SERVICE_URL = 'http://localhost:5000';   // Python health monitoring service
+const UPDATE_INTERVAL = 2000; // 2 second refresh rate for real-time updates
 
-// Store for dashboard data
+// In-memory data store for dashboard state management
+// Caches latest cluster data to reduce API calls and improve response times
 let dashboardData = {
-  brokers: {},
-  clients: {},
-  systemHealth: {},
-  lastUpdate: null
+  brokers: {},        // Broker health status and connection information
+  clients: {},        // Active client connections and session data
+  systemHealth: {},   // Overall system health metrics and status
+  lastUpdate: null    // Timestamp of last successful data refresh
 };
 
 // Fetch data from health service
