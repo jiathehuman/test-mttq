@@ -1,0 +1,180 @@
+#cloud-config
+# Cloud-init configuration for MQTT Broker 4
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - mosquitto
+  - mosquitto-clients
+  - htop
+  - curl
+  - jq
+
+write_files:
+  - path: /etc/mosquitto/mosquitto.conf
+    content: |
+      # MQTT Broker 4 Configuration
+
+      # Basic settings
+      port 1883
+      listener 1883 0.0.0.0
+
+      # Allow anonymous connections for testing
+      allow_anonymous true
+
+      # Persistence
+      persistence true
+      persistence_location /var/lib/mosquitto/
+
+      # Logging
+      log_dest file /var/log/mosquitto/mosquitto.log
+      log_type all
+      log_timestamp true
+      log_timestamp_format %Y-%m-%dT%H:%M:%S
+
+      # Connection settings
+      max_connections 1000
+      max_keepalive 65535
+
+      # Bridge configurations to other brokers
+      connection broker1
+      address 192.168.100.10:1883
+      topic # both 0 local/ remote/
+      try_private false
+      cleansession true
+      restart_timeout 30
+
+      connection broker2
+      address 192.168.100.11:1883
+      topic # both 0 local/ remote/
+      try_private false
+      cleansession true
+      restart_timeout 30
+
+      connection broker3
+      address 192.168.100.12:1883
+      topic # both 0 local/ remote/
+      try_private false
+      cleansession true
+      restart_timeout 30
+
+      connection broker4
+      address 192.168.100.13:1883
+      topic # both 0 local/ remote/
+      try_private false
+      cleansession true
+      restart_timeout 30
+
+      connection broker5
+      address 192.168.100.14:1883
+      topic # both 0 local/ remote/
+      try_private false
+      cleansession true
+      restart_timeout 30
+    owner: mosquitto:mosquitto
+    permissions: '0644'
+
+  - path: /usr/local/bin/mqtt-health-reporter.py
+    content: |
+      #!/usr/bin/env python3
+      import paho.mqtt.client as mqtt
+      import json
+      import time
+      import socket
+      import subprocess
+      import os
+
+      BROKER_ID = "broker4"
+      BROKER_IP = "192.168.100.13"
+      HEALTH_TOPIC = "system/health/brokers"
+      CLIENT_STATUS_TOPIC = "clients/status"
+
+      def get_broker_stats():
+          try:
+              # Get mosquitto process info
+              result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+              mosquitto_running = 'mosquitto' in result.stdout
+
+              # Get connection count (approximation)
+              try:
+                  netstat_result = subprocess.run(['netstat', '-an'], capture_output=True, text=True)
+                  connections = netstat_result.stdout.count(':1883')
+              except:
+                  connections = 0
+
+              return {
+                  "broker_id": BROKER_ID,
+                  "ip": BROKER_IP,
+                  "status": "online" if mosquitto_running else "offline",
+                  "timestamp": int(time.time()),
+                  "connections": connections,
+                  "uptime": time.time() - start_time
+              }
+          except Exception as e:
+              return {
+                  "broker_id": BROKER_ID,
+                  "ip": BROKER_IP,
+                  "status": "error",
+                  "error": str(e),
+                  "timestamp": int(time.time())
+              }
+
+      def on_connect(client, userdata, flags, rc):
+          print(f"Health reporter connected with result code {rc}")
+
+      def on_message(client, userdata, msg):
+          # Handle client status updates
+          if msg.topic.startswith(CLIENT_STATUS_TOPIC):
+              print(f"Client status: {msg.topic} - {msg.payload.decode()}")
+
+      if __name__ == "__main__":
+          start_time = time.time()
+
+          client = mqtt.Client(f"health-reporter-{BROKER_ID}")
+          client.on_connect = on_connect
+          client.on_message = on_message
+
+          try:
+              client.connect("localhost", 1883, 60)
+              client.subscribe(f"{CLIENT_STATUS_TOPIC}/+")
+
+              client.loop_start()
+
+              while True:
+                  stats = get_broker_stats()
+                  client.publish(HEALTH_TOPIC, json.dumps(stats), retain=True)
+                  time.sleep(10)
+
+          except KeyboardInterrupt:
+              print("Health reporter stopping...")
+              client.loop_stop()
+              client.disconnect()
+    owner: mosquitto:mosquitto
+    permissions: '0755'
+
+  - path: /etc/systemd/system/mqtt-health.service
+    content: |
+      [Unit]
+      Description=MQTT Health Reporter
+      After=mosquitto.service
+
+      [Service]
+      Type=simple
+      User=mosquitto
+      ExecStart=/usr/local/bin/mqtt-health-reporter.py
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    permissions: '0644'
+
+runcmd:
+  - systemctl enable mosquitto
+  - systemctl start mosquitto
+  - systemctl enable mqtt-health
+  - systemctl start mqtt-health
+  - echo "MQTT Broker 4 setup complete" >> /var/log/setup.log
+
+final_message: "MQTT Broker 4 is ready!"
